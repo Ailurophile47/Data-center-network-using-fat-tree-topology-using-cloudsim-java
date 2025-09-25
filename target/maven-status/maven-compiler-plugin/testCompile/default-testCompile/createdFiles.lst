@@ -1,1 +1,2 @@
-com\datacenter\simulation\FatTreeNetworkTest.class
+com\datacenter\simulation\FatTreeNetwork.class
+com\datacenter\simulation\FatTreeNetwork$NetworkStats.class
