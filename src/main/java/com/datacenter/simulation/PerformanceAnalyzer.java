@@ -10,10 +10,10 @@ import java.util.List;
 public class PerformanceAnalyzer {
     
     public static void main(String[] args) {
-        System.out.println("=".repeat(55));
-        System.out.println("            FAT TREE PERFORMANCE ANALYZER             ");
-        System.out.println("          Comparing Different Configurations          ");
-        System.out.println("=".repeat(55));
+        System.out.println("╔═══════════════════════════════════════════════════════╗");
+        System.out.println("║            FAT TREE PERFORMANCE ANALYZER             ║");
+        System.out.println("║          Comparing Different Configurations          ║");
+        System.out.println("╚═══════════════════════════════════════════════════════╝");
         System.out.println();
         
         // Run comparative analysis
@@ -26,8 +26,8 @@ public class PerformanceAnalyzer {
      * Compare different Fat Tree network sizes (k values)
      */
     private static void compareNetworkSizes() {
-        System.out.println("NETWORK SIZE COMPARISON");
-        System.out.println("=".repeat(60));
+        System.out.println("🔍 NETWORK SIZE COMPARISON");
+        System.out.println("═".repeat(60));
         
         int[] kValues = {2, 4, 6, 8};
         
@@ -55,7 +55,7 @@ public class PerformanceAnalyzer {
      * Print scalability analysis
      */
     private static void printScalabilityAnalysis() {
-        System.out.println("SCALABILITY ANALYSIS");
+        System.out.println("📈 SCALABILITY ANALYSIS");
         System.out.println("-".repeat(40));
         
         System.out.println("Key Observations:");
@@ -77,8 +77,8 @@ public class PerformanceAnalyzer {
      * Compare different workload scenarios
      */
     private static void compareWorkloadScenarios() {
-        System.out.println("WORKLOAD SCENARIO COMPARISON");
-        System.out.println("=".repeat(60));
+        System.out.println("💼 WORKLOAD SCENARIO COMPARISON");
+        System.out.println("═".repeat(60));
         
         WorkloadScenario[] scenarios = {
             new WorkloadScenario("Web Serving", 0.3, 0.2, 0.8, "Low CPU, High Network"),
@@ -106,7 +106,7 @@ public class PerformanceAnalyzer {
      * Print workload-specific recommendations
      */
     private static void printWorkloadRecommendations() {
-        System.out.println("WORKLOAD OPTIMIZATION TIPS");
+        System.out.println("💡 WORKLOAD OPTIMIZATION TIPS");
         System.out.println("-".repeat(45));
         
         System.out.println("For Network-Intensive Workloads:");
@@ -132,8 +132,8 @@ public class PerformanceAnalyzer {
      * Generate configuration recommendations
      */
     private static void generateRecommendations() {
-        System.out.println("CONFIGURATION RECOMMENDATIONS");
-        System.out.println("=".repeat(60));
+        System.out.println("🎯 CONFIGURATION RECOMMENDATIONS");
+        System.out.println("═".repeat(60));
         
         printNetworkDesignGuidelines();
         printPerformanceTuningTips();
@@ -144,7 +144,7 @@ public class PerformanceAnalyzer {
      * Print network design guidelines
      */
     private static void printNetworkDesignGuidelines() {
-        System.out.println("NETWORK DESIGN GUIDELINES");
+        System.out.println("🏗️  NETWORK DESIGN GUIDELINES");
         System.out.println("-".repeat(40));
         
         System.out.println("1. Choosing k value:");
@@ -170,7 +170,7 @@ public class PerformanceAnalyzer {
      * Print performance tuning tips
      */
     private static void printPerformanceTuningTips() {
-        System.out.println("PERFORMANCE TUNING TIPS");
+        System.out.println("⚡ PERFORMANCE TUNING TIPS");
         System.out.println("-".repeat(35));
         
         System.out.println("Simulation Optimization:");
@@ -196,7 +196,7 @@ public class PerformanceAnalyzer {
      * Print future enhancement suggestions
      */
     private static void printFutureEnhancements() {
-        System.out.println("FUTURE ENHANCEMENTS");
+        System.out.println("🚀 FUTURE ENHANCEMENTS");
         System.out.println("-".repeat(30));
         
         System.out.println("Network Features:");
@@ -225,7 +225,7 @@ public class PerformanceAnalyzer {
      * Calculate theoretical performance metrics
      */
     public static void calculateTheoreticalMetrics(int k) {
-        System.out.printf("\nTHEORETICAL METRICS FOR k=%d%n", k);
+        System.out.printf("\n📊 THEORETICAL METRICS FOR k=%d%n", k);
         System.out.println("-".repeat(40));
         
         int maxHosts = (k * k * k) / 4;

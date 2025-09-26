@@ -4,3 +4,4 @@ com\datacenter\simulation\FatTreeNetwork$NetworkStats.class
 com\datacenter\simulation\PerformanceAnalyzer$WorkloadScenario.class
 com\datacenter\simulation\FatTreeNetwork.class
 com\datacenter\simulation\network\FatTreeNetwork.class
+com\datacenter\simulation\network\FatTreeNetwork$NetworkStats.class

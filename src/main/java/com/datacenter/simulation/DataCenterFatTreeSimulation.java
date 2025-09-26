@@ -3,6 +3,7 @@ package com.datacenter.simulation;
 import org.cloudbus.cloudsim.brokers.DatacenterBroker;
 import org.cloudbus.cloudsim.brokers.DatacenterBrokerSimple;
 import org.cloudbus.cloudsim.cloudlets.Cloudlet;
+import org.cloudbus.cloudsim.cloudlets.CloudletSimple;
 import org.cloudbus.cloudsim.cloudlets.network.CloudletExecutionTask;
 import org.cloudbus.cloudsim.cloudlets.network.CloudletReceiveTask;
 import org.cloudbus.cloudsim.cloudlets.network.CloudletSendTask;
@@ -38,10 +39,15 @@ import java.util.HashMap;
 public class DataCenterFatTreeSimulation {
     
     // Simulation parameters
-    private static final int HOSTS = 16;           // Number of hosts (must be <= k^3/4)
-    private static final int VMS = 12;             // Number of VMs
-    private static final int CLOUDLETS = 24;       // Number of cloudlets
-    private static final int FAT_TREE_K = 4;       // Fat tree parameter (must be even)
+    // Fast mode toggle: enable by setting env SIM_FAST=true or system property -Dsim.fast=true
+    private static final boolean FAST_MODE = "true".equalsIgnoreCase(System.getenv("SIM_FAST"))
+        || "true".equalsIgnoreCase(System.getProperty("sim.fast"));
+
+    // Reduced defaults for faster development / testing runs (can be further reduced in FAST_MODE)
+    private static final int HOSTS = FAST_MODE ? 2 : 4;            // Number of hosts (must be <= k^3/4)
+    private static final int VMS = FAST_MODE ? 2 : 4;              // Number of VMs
+    private static final int CLOUDLETS = FAST_MODE ? 2 : 8;        // Number of cloudlets
+    private static final int FAT_TREE_K = 4;                       // Fat tree parameter (must be even)
     
     // Host specifications (realistic data center specs)
     private static final long HOST_MIPS = 20000;   // 20 GIPS per core
@@ -58,7 +64,8 @@ public class DataCenterFatTreeSimulation {
     private static final long VM_BW = 1000;        // 1 Gbps network
     
     // Cloudlet specifications
-    private static final long CLOUDLET_LENGTH = 10000;  // 10 GIPS
+    // Shorter cloudlets for faster simulation runs during development
+    private static final long CLOUDLET_LENGTH = FAST_MODE ? 200 : 1000;  // smaller workload in FAST_MODE
     private static final long CLOUDLET_FILE_SIZE = 1024; // 1 MB
     private static final long CLOUDLET_OUTPUT_SIZE = 1024; // 1 MB
     
@@ -67,6 +74,8 @@ public class DataCenterFatTreeSimulation {
     private List<NetworkHost> hostList;
     private List<NetworkVm> vmList;
     private List<NetworkCloudlet> cloudletList;
+    // For FAST_MODE use simple cloudlets to ensure they complete reliably
+    private List<Cloudlet> simpleCloudletList;
     private NetworkDatacenter datacenter;
     private FatTreeNetwork fatTreeNetwork;
     
@@ -81,10 +90,10 @@ public class DataCenterFatTreeSimulation {
     public DataCenterFatTreeSimulation() {
         simulationStartTime = System.currentTimeMillis();
         
-        System.out.println("╔════════════════════════════════════════════════════════╗");
-        System.out.println("║     DATA CENTER FAT TREE NETWORK SIMULATION           ║");
-        System.out.println("║              CloudSim Plus Framework                  ║");
-        System.out.println("╚════════════════════════════════════════════════════════╝");
+        System.out.println("╔══════════════════════════════════════════════════════╗");
+        System.out.println("║     DATA CENTER FAT TREE NETWORK SIMULATION         ║");
+        System.out.println("║              CloudSim Plus Framework                ║");
+        System.out.println("╚══════════════════════════════════════════════════════╝");
         System.out.println();
         
         try {
@@ -110,6 +119,15 @@ public class DataCenterFatTreeSimulation {
         System.out.println("Initializing CloudSim simulation environment...");
         simulation = new CloudSim();
         broker = new DatacenterBrokerSimple(simulation);
+        // Only apply aggressive VM/datacenter timing tweaks when NOT in FAST_MODE.
+        // FAST_MODE will use small cloudlets instead and shouldn't need these hacks.
+        if (!FAST_MODE) {
+            // Try to increase VM destruction delay to avoid VMs being removed while cloudlets are running
+            // Use a large finite value instead of infinity to be safer across CloudSim versions
+            tryInvoke(broker, "setVmDestructionDelay", new Class[]{double.class}, 100000.0);
+            // Try to reduce the minimum time between events to avoid missed events during tight workloads
+            tryInvoke(simulation, "setMinTimeBetweenEvents", new Class[]{double.class}, 0.001);
+        }
         System.out.println("Simulation environment ready!");
         System.out.println();
     }
@@ -127,7 +145,8 @@ public class DataCenterFatTreeSimulation {
         datacenter = createNetworkDatacenter();
         
         // Create and configure fat tree network
-        fatTreeNetwork = new FatTreeNetwork(datacenter, FAT_TREE_K);
+        fatTreeNetwork = new FatTreeNetwork(FAT_TREE_K);
+        fatTreeNetwork.setDatacenter(datacenter);
         fatTreeNetwork.connectHosts(hostList);
         fatTreeNetwork.printTopologyStats();
         
@@ -140,13 +159,39 @@ public class DataCenterFatTreeSimulation {
      */
     private void createWorkload() {
         System.out.println("Creating workload...");
-        
         vmList = createNetworkVms();
-        cloudletList = createNetworkCloudlets();
-        
-        // Submit to broker
+
         broker.submitVmList(vmList);
-        broker.submitCloudletList(cloudletList);
+
+        if (FAST_MODE) {
+            // Create lightweight CloudletSimple objects for reliable, fast runs
+            simpleCloudletList = new java.util.ArrayList<>();
+            System.out.printf("Creating %d simple cloudlets for FAST_MODE...%n", CLOUDLETS);
+            for (int i = 0; i < CLOUDLETS; i++) {
+                long length = CLOUDLET_LENGTH; // small in FAST_MODE
+                CloudletSimple c = new CloudletSimple(length, VM_PES);
+                c.setSizes(CLOUDLET_FILE_SIZE);
+                c.setUtilizationModelCpu(new UtilizationModelDynamic(0.05, 0.15));
+                simpleCloudletList.add(c);
+            }
+            broker.submitCloudletList(simpleCloudletList);
+        } else {
+            cloudletList = createNetworkCloudlets();
+
+            // Bind network cloudlets to VMs deterministically to avoid mapping delays/issues
+            if (vmList != null && !vmList.isEmpty()) {
+                for (int i = 0; i < cloudletList.size(); i++) {
+                    NetworkCloudlet c = cloudletList.get(i);
+                    long vmId = vmList.get(i % vmList.size()).getId();
+                    try {
+                        java.lang.reflect.Method m = c.getClass().getMethod("setVmId", long.class);
+                        m.invoke(c, vmId);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            broker.submitCloudletList(cloudletList);
+        }
         
         System.out.println("Workload created and submitted!");
         System.out.println();
@@ -212,7 +257,28 @@ public class DataCenterFatTreeSimulation {
           .setCostPerBw(0.0);          // Free bandwidth (internal)
         
         System.out.printf("Created network datacenter with %d hosts%n", hostList.size());
+        // Try to reduce the datacenter scheduling interval to avoid missed events (only for non-fast runs)
+        if (!FAST_MODE) {
+            tryInvoke(dc, "setSchedulingInterval", new Class[]{double.class}, 0.001);
+        }
         return dc;
+    }
+
+    /**
+     * Utility: attempt to invoke a method reflectively if it exists (silently ignore if not present).
+     */
+    private void tryInvoke(Object target, String methodName, Class<?>[] paramTypes, Object... args) {
+        if (target == null) return;
+        try {
+            java.lang.reflect.Method m = target.getClass().getMethod(methodName, paramTypes);
+            m.setAccessible(true);
+            m.invoke(target, args);
+            System.out.printf("Invoked %s on %s%n", methodName, target.getClass().getSimpleName());
+        } catch (NoSuchMethodException ignored) {
+            // method not present in this CloudSim Plus version: ignore
+        } catch (Exception e) {
+            System.err.printf("Failed to invoke %s on %s: %s%n", methodName, target.getClass().getSimpleName(), e.getMessage());
+        }
     }
 
     /**
@@ -251,17 +317,24 @@ public class DataCenterFatTreeSimulation {
         System.out.printf("Creating %d network cloudlets...%n", CLOUDLETS);
         
         for (int i = 0; i < CLOUDLETS; i++) {
-            // Variable cloudlet lengths to simulate different workload types
-            long length = CLOUDLET_LENGTH + (i % 5) * 2000; // 10-18 GIPS variation
+            // Variable cloudlet lengths to simulate different workload types.
+            // Use a delta proportional to CLOUDLET_LENGTH so FAST_MODE stays small.
+            long delta = Math.max(1, CLOUDLET_LENGTH / 2);
+            long length = CLOUDLET_LENGTH + (i % 5) * delta;
             
             NetworkCloudlet cloudlet = new NetworkCloudlet(i, length, VM_PES);
-            cloudlet.setMemory(1024)  // 1 GB memory requirement
-                   .setUtilizationModelCpu(new UtilizationModelDynamic(0.2, 0.8))   // 20-80% CPU
-                   .setUtilizationModelRam(new UtilizationModelDynamic(0.1, 0.4))   // 10-40% RAM  
-                   .setUtilizationModelBw(new UtilizationModelDynamic(0.1, 0.6));   // 10-60% BW
+         cloudlet.setMemory(1024)  // 1 GB memory requirement
+             .setFileSize(CLOUDLET_FILE_SIZE)
+             .setOutputSize(CLOUDLET_OUTPUT_SIZE)
+             // Use lighter utilization during dev/testing so the simulator finishes quicker
+             .setUtilizationModelCpu(new UtilizationModelDynamic(0.05, 0.15))   // 5-15% CPU
+             .setUtilizationModelRam(new UtilizationModelDynamic(0.02, 0.08))   // 2-8% RAM  
+             .setUtilizationModelBw(new UtilizationModelDynamic(0.02, 0.12));   // 2-12% BW
             
-            // Add network communication tasks
-            addRealisticNetworkTasks(cloudlet, i);
+            // Add network communication tasks (skip in FAST_MODE to reduce event count)
+            if (!FAST_MODE) {
+                addRealisticNetworkTasks(cloudlet, i);
+            }
             
             cloudletList.add(cloudlet);
         }
@@ -314,7 +387,35 @@ public class DataCenterFatTreeSimulation {
     private void analyzeResults() {
         System.out.println("SIMULATION RESULTS ANALYSIS");
         System.out.println("=".repeat(60));
-        
+        // Debug: print status of each created cloudlet and their assigned VM (if any)
+        System.out.println("\n[DEBUG] Cloudlet statuses after simulation:");
+        if (cloudletList != null) {
+            for (NetworkCloudlet c : cloudletList) {
+                String vmInfo = c.getVm() != null ? String.valueOf(c.getVm().getId()) : "<unassigned>";
+                System.out.printf("  Cloudlet %d: status=%s, vm=%s, start=%.2f, finish=%.2f\n",
+                        c.getId(), c.getStatus(), vmInfo, c.getExecStartTime(), c.getFinishTime());
+            }
+        }
+        if (simpleCloudletList != null) {
+            for (Cloudlet c : simpleCloudletList) {
+                String vmInfo = c.getVm() != null ? String.valueOf(c.getVm().getId()) : "<unassigned>";
+                System.out.printf("  SimpleCloudlet %d: status=%s, vm=%s, start=%.2f, finish=%.2f\n",
+                        c.getId(), c.getStatus(), vmInfo, c.getExecStartTime(), c.getFinishTime());
+            }
+        }
+
+        // Try to print broker lists sizes if available
+        try {
+        java.util.List<Cloudlet> created = broker.getCloudletCreatedList();
+        java.util.List<Cloudlet> submitted = broker.getCloudletSubmittedList();
+        java.util.List<Cloudlet> waiting = broker.getCloudletWaitingList();
+        java.util.List<Cloudlet> finished = broker.getCloudletFinishedList();
+        System.out.printf("[DEBUG] Broker lists -> created=%d, submitted=%d, waiting=%d, finished=%d\n",
+            created.size(), submitted.size(), waiting.size(), finished.size());
+        } catch (Throwable t) {
+            // ignore if methods not present
+        }
+
         List<Cloudlet> finishedCloudlets = broker.getCloudletFinishedList();
         
         printExecutionSummary(finishedCloudlets);
@@ -360,10 +461,14 @@ public class DataCenterFatTreeSimulation {
         System.out.println("-".repeat(80));
         
         for (Cloudlet cloudlet : cloudlets) {
+            long hostId = cloudlet.getVm() != null && cloudlet.getVm().getHost() != null ? 
+                         cloudlet.getVm().getHost().getId() : -1;
+            long vmId = cloudlet.getVm() != null ? cloudlet.getVm().getId() : -1;
+            
             System.out.printf("%-8d %-6d %-8d %-12.2f %-12.2f %-12.2f %-10s%n",
                     cloudlet.getId(),
-                    cloudlet.getVm().getId(),
-                    cloudlet.getVm().getHost().getId(),
+                    vmId,
+                    hostId,
                     cloudlet.getExecStartTime(),
                     cloudlet.getFinishTime(),
                     cloudlet.getActualCpuTime(),
@@ -387,6 +492,13 @@ public class DataCenterFatTreeSimulation {
                 maxFinishTime = Math.max(maxFinishTime, cloudlet.getFinishTime());
                 successfulCloudlets++;
             }
+        }
+        
+        if (successfulCloudlets == 0) {
+            System.out.println("\nPERFORMANCE METRICS");
+            System.out.println("-".repeat(40));
+            System.out.println("No successful cloudlets to analyze.");
+            return;
         }
         
         System.out.println("\nPERFORMANCE METRICS");
@@ -413,6 +525,11 @@ public class DataCenterFatTreeSimulation {
         System.out.println("\nNETWORK TOPOLOGY ANALYSIS");
         System.out.println("-".repeat(45));
         
+        if (fatTreeNetwork == null) {
+            System.out.println("Fat tree network not properly initialized.");
+            return;
+        }
+        
         FatTreeNetwork.NetworkStats stats = fatTreeNetwork.getNetworkStats();
         
         System.out.printf("Network Parameter k:       %d%n", stats.k);
@@ -429,54 +546,54 @@ public class DataCenterFatTreeSimulation {
     }
     
     /**
- * Print cost analysis - Fixed version without non-existent methods
- */
-private void printCostAnalysis(List<Cloudlet> cloudlets) {
-    double totalCost = 0;
-    double totalProcessingCost = 0;
-    double totalMemoryCost = 0;
-    double totalStorageCost = 0;
-    
-    // Calculate costs manually since CloudSim Plus doesn't have direct cost methods
-    for (Cloudlet cloudlet : cloudlets) {
-        if (cloudlet.getStatus() == Cloudlet.Status.SUCCESS) {
-            // Calculate processing cost based on actual CPU time
-            double processingCost = cloudlet.getActualCpuTime() * 
-                                  datacenter.getCharacteristics().getCostPerSecond();
-            
-            // Calculate memory cost based on VM RAM and execution time
-            double memoryCost = (cloudlet.getVm().getRam().getCapacity() / 1024.0) * 
-                              cloudlet.getActualCpuTime() * 
-                              datacenter.getCharacteristics().getCostPerMem();
-            
-            // Calculate storage cost based on VM storage and execution time
-            double storageCost = (cloudlet.getVm().getStorage().getCapacity() / 1024.0) * 
-                               cloudlet.getActualCpuTime() * 
-                               datacenter.getCharacteristics().getCostPerStorage();
-            
-            totalProcessingCost += processingCost;
-            totalMemoryCost += memoryCost;
-            totalStorageCost += storageCost;
-            totalCost += (processingCost + memoryCost + storageCost);
+     * Print cost analysis - Fixed version without non-existent methods
+     */
+    private void printCostAnalysis(List<Cloudlet> cloudlets) {
+        double totalCost = 0;
+        double totalProcessingCost = 0;
+        double totalMemoryCost = 0;
+        double totalStorageCost = 0;
+        
+        // Calculate costs manually since CloudSim Plus doesn't have direct cost methods
+        for (Cloudlet cloudlet : cloudlets) {
+            if (cloudlet.getStatus() == Cloudlet.Status.SUCCESS && cloudlet.getVm() != null) {
+                // Calculate processing cost based on actual CPU time
+                double processingCost = cloudlet.getActualCpuTime() * 
+                                      datacenter.getCharacteristics().getCostPerSecond();
+                
+                // Calculate memory cost based on VM RAM and execution time
+                double memoryCost = (cloudlet.getVm().getRam().getCapacity() / 1024.0) * 
+                                  cloudlet.getActualCpuTime() * 
+                                  datacenter.getCharacteristics().getCostPerMem();
+                
+                // Calculate storage cost based on VM storage and execution time
+                double storageCost = (cloudlet.getVm().getStorage().getCapacity() / 1024.0) * 
+                                   cloudlet.getActualCpuTime() * 
+                                   datacenter.getCharacteristics().getCostPerStorage();
+                
+                totalProcessingCost += processingCost;
+                totalMemoryCost += memoryCost;
+                totalStorageCost += storageCost;
+                totalCost += (processingCost + memoryCost + storageCost);
+            }
+        }
+        
+        System.out.println("\nCOST ANALYSIS");
+        System.out.println("-".repeat(30));
+        
+        if (totalCost > 0) {
+            System.out.printf("Total Cost:           $%.2f%n", totalCost);
+            System.out.printf("|- Processing Cost:   $%.2f (%.1f%%)%n", 
+                             totalProcessingCost, (totalProcessingCost / totalCost) * 100);
+            System.out.printf("|- Memory Cost:       $%.2f (%.1f%%)%n", 
+                             totalMemoryCost, (totalMemoryCost / totalCost) * 100);
+            System.out.printf("|- Storage Cost:      $%.2f (%.1f%%)%n", 
+                             totalStorageCost, (totalStorageCost / totalCost) * 100);
+            System.out.printf("Cost per Cloudlet:    $%.4f%n", totalCost / cloudlets.size());
+        } else {
+            System.out.println("No cost data available (costs may be set to 0)");
         }
     }
-    
-    System.out.println("\nCOST ANALYSIS");
-    System.out.println("-".repeat(30));
-    
-    if (totalCost > 0) {
-        System.out.printf("Total Cost:           $%.2f%n", totalCost);
-        System.out.printf("|- Processing Cost:   $%.2f (%.1f%%)%n", 
-                         totalProcessingCost, (totalProcessingCost / totalCost) * 100);
-        System.out.printf("|- Memory Cost:       $%.2f (%.1f%%)%n", 
-                         totalMemoryCost, (totalMemoryCost / totalCost) * 100);
-        System.out.printf("|- Storage Cost:      $%.2f (%.1f%%)%n", 
-                         totalStorageCost, (totalStorageCost / totalCost) * 100);
-        System.out.printf("Cost per Cloudlet:    $%.4f%n", totalCost / cloudlets.size());
-    } else {
-        System.out.println("No cost data available (costs may be set to 0)");
-    }
-}
     
     /**
      * Print resource utilization analysis
