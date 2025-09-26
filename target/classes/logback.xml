@@ -1,1 +1,41 @@
-﻿
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console appender for output -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for detailed logs -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>simulation.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- CloudSim specific logger - reduce verbosity -->
+    <logger name="org.cloudbus.cloudsim" level="WARN"/>
+    <logger name="org.cloudsimplus" level="WARN"/>
+    
+    <!-- Network specific loggers -->
+    <logger name="org.cloudbus.cloudsim.network" level="ERROR"/>
+    <logger name="org.cloudbus.cloudsim.datacenters.network" level="WARN"/>
+    
+    <!-- Our simulation package - reduce verbosity during development/testing -->
+    <logger name="com.datacenter.simulation" level="WARN"/>
+    
+    <!-- Root logger configuration -->
+    <root level="WARN">
+        <appender-ref ref="STDOUT" />
+        <!-- Uncomment the next line if you want file logging -->
+        <!-- <appender-ref ref="FILE" /> -->
+    </root>
+    
+    <!-- For debugging, you can temporarily set root level to DEBUG -->
+    <!-- <root level="DEBUG"> -->
+    <!--     <appender-ref ref="STDOUT" /> -->
+    <!--     <appender-ref ref="FILE" /> -->
+    <!-- </root> -->
+</configuration>

@@ -7,7 +7,6 @@ import java.util.List;
 
 public class FatTreeNetwork {
     private int k;
-    @SuppressWarnings("unused")
     private NetworkDatacenter datacenter;
     private List<Object> coreSwitches = new ArrayList<>();
     private List<Object> aggregationSwitches = new ArrayList<>();
@@ -50,5 +49,30 @@ public class FatTreeNetwork {
 
     public List<NetworkHost> getHosts() {
         return hosts;
+    }
+
+    public Object getBisectionBandwidth() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getBisectionBandwidth'");
+    }
+
+    public Object getMaxEqualCostPaths() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getMaxEqualCostPaths'");
+    }
+
+    public class NetworkStats {
+
+        public static final int aggregationSwitches = 0;
+        public int edgeSwitches;
+        public Object utilization;
+        public Object connectedHosts;
+        public int coreSwitches;
+        public int k;
+    }
+
+    public NetworkStats getNetworkStats() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getNetworkStats'");
     }
 }
